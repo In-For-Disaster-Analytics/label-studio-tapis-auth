@@ -105,6 +105,24 @@ class TapisOAuth2Backend(ModelBackend):
             if changed:
                 user.save()
 
+        # Label Studio's own core/views.py main() logs the user straight back
+        # out if active_organization is None -- discovered the hard way: a
+        # Tapis-authenticated user landed on Label Studio's own login page
+        # right after a successful SSO login, because get_or_create() above
+        # makes a bare User with no organization. Mirrors the same org
+        # attachment users/functions/common.py's save_user() does for a
+        # normal signup: join the existing org, or create the first one.
+        if user.active_organization is None:
+            from organizations.models import Organization
+
+            if Organization.objects.exists():
+                org = Organization.objects.first()
+                org.add_user(user)
+            else:
+                org = Organization.create_organization(created_by=user, title="Label Studio")
+            user.active_organization = org
+            user.save(update_fields=["active_organization"])
+
         logger.info("Tapis OAuth2 login: %s (%s)", username, "created" if created else "existing")
         return user
 

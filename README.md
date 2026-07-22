@@ -18,12 +18,14 @@ custom code on top of upstream rather than forking it.
 repo-scoped `GITHUB_TOKEN`, so no extra secrets to configure for the build
 itself.
 
-**Unverified compatibility note**: Tapis Pods' own docs state images are
-pulled from "the public Docker Hub" and don't confirm or rule out other
-registries like GHCR. This hasn't been tested against a real Tapis pod
-creation call yet. If GHCR turns out unsupported, the fix is adding one more
-push step to the same workflow (Docker Hub credentials as two more repo
-secrets) rather than any rework — worth confirming before depending on this.
+**GHCR compatibility: confirmed.** Tapis Pods' own docs only mention "the
+public Docker Hub," but this ecosystem already runs production Tapis Pods
+from GHCR images — see `subside/tapis/register_pods.py` (`subsideapi`,
+`subsideui` pods, images `ghcr.io/<owner>/subside-{api,ui}`). One real
+constraint from that precedent, not documented anywhere in Tapis's own docs:
+**the GHCR package must be public** — Tapis Pods pulls custom images
+anonymously, so a private GHCR repo will fail to pull. This repo is public,
+so that's already satisfied.
 
 ## How it differs from WebODM's existing Tapis backend
 
@@ -38,8 +40,8 @@ too — flagging it here rather than silently fixing it there.
 
 ```bash
 curl -H "X-Tapis-Token: $JWT" -H "Content-type: application/json" \
-  -d '{"client_id": "label-studio", "callback_url": "https://<your-label-studio-host>/tapis/callback/"}' \
-  https://<your-tenant>.tapis.io/v3/oauth2/clients
+  -d '{"client_id": "label-studio", "callback_url": "https://label-studio.pods.portals.tapis.io/tapis/callback/"}' \
+  https://portals.tapis.io/v3/oauth2/clients
 ```
 
 This requires a Tapis account with tenant access — needs to be run by
@@ -51,7 +53,7 @@ returns `client_id` and `client_key` (Tapis's name for what we call
 
 | Variable | Value |
 |---|---|
-| `TAPIS_BASE_URL` | e.g. `https://tacc.tapis.io` |
+| `TAPIS_BASE_URL` | `https://portals.tapis.io` (this ecosystem's actual tenant base — see `subside`) |
 | `TAPIS_TENANT_ID` | the Tapis tenant this client was registered under |
 | `TAPIS_CLIENT_ID` | from step 1 |
 | `TAPIS_CLIENT_SECRET` | the `client_key` value from step 1 |
@@ -81,11 +83,11 @@ t.pods.create_pod(
     pod_id="label-studio",
     image="ghcr.io/in-for-disaster-analytics/label-studio-tapis-auth:latest",
     environment_variables={
-        "TAPIS_BASE_URL": "https://tacc.tapis.io",
-        "TAPIS_TENANT_ID": "tacc",
+        "TAPIS_BASE_URL": "https://portals.tapis.io",
+        "TAPIS_TENANT_ID": "portals",
         "TAPIS_CLIENT_ID": "label-studio",
         "TAPIS_CLIENT_SECRET": "<client_key from step 1>",
-        "TAPIS_CALLBACK_URL": "https://label-studio.pods.tacc.tapis.io/tapis/callback/",
+        "TAPIS_CALLBACK_URL": "https://label-studio.pods.portals.tapis.io/tapis/callback/",
     },
     volume_mounts={"/label-studio/data": {"type": "tapisvolume", "source_id": "label-studio-data"}},
     networking={"default": {"protocol": "http", "port": 8080}},
@@ -95,8 +97,9 @@ t.pods.create_pod(
 
 Register the OAuth2 client (step 1) with the pod's URL *before* creating the
 pod — the subdomain is deterministic from `pod_id`
-(`https://label-studio.pods.tacc.tapis.io`), so there's no chicken-and-egg
-problem if the client is registered first.
+(`https://label-studio.pods.portals.tapis.io`), so there's no chicken-and-egg
+problem if the client is registered first. Same ordering `subside`'s own
+`register_pods.py` uses.
 
 Two things to decide when actually deploying:
 
@@ -115,14 +118,18 @@ Built and booted (`docker build` + `docker run`) against the real
 
 - Django starts cleanly with the appended settings/urls (this caught a real
   bug on the first attempt — see "Django settings gotcha" below).
-- `GET /tapis/login/` returns a correct 302 to `https://tacc.tapis.io/v3/oauth2/authorize`
-  with the right `client_id`, URL-encoded `redirect_uri`, random `state`, and
-  a session cookie to track it.
+- `GET /tapis/login/` returns a correct 302 to `{TAPIS_BASE_URL}/v3/oauth2/authorize`
+  (tested with `tacc.tapis.io` as `TAPIS_BASE_URL`; production should use
+  `portals.tapis.io`) with the right `client_id`, URL-encoded `redirect_uri`,
+  random `state`, and a session cookie to track it.
 - `GET /tapis/callback/` correctly rejects missing/mismatched state (400).
 - `TapisOAuth2Backend._verify_token()` was called directly with a forged
   token (valid structure, fabricated payload, garbage signature) — it made a
-  real call to `tacc.tapis.io`'s Tenants API, fetched the real public key,
-  and correctly rejected the forgery.
+  real call to `tacc.tapis.io`'s Tenants API (used here only because it was
+  a convenient, reachable Tapis tenant for testing the verification logic
+  itself — production should target `portals.tapis.io`, this ecosystem's
+  actual tenant), fetched the real public key, and correctly rejected the
+  forgery.
 
 **Not yet verified**: the full authorize → user login at Tapis → callback →
 token exchange round-trip, since that requires a real registered OAuth2

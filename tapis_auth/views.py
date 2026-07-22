@@ -7,6 +7,7 @@ migrations to a Label Studio deployment we don't otherwise need to modify.
 
 import logging
 import secrets
+import time
 from urllib.parse import urlencode
 
 import requests
@@ -66,22 +67,19 @@ def callback(request):
     backend = TapisOAuth2Backend()
     user = backend.authenticate(request, access_token=access_token)
     if not user:
-        print("TAPIS_DEBUG: backend.authenticate() returned None", flush=True)
+        logger.warning("Tapis token verification failed at callback")
         return HttpResponseBadRequest("Tapis token verification failed")
-
-    print(f"TAPIS_DEBUG: authenticated user={user.username!r} "
-          f"active_organization={user.active_organization!r} "
-          f"is_active={user.is_active!r}", flush=True)
 
     login(request, user, backend="tapis_auth.backend.TapisOAuth2Backend")
 
-    print(f"TAPIS_DEBUG: after login() session_key={request.session.session_key!r} "
-          f"request.user.is_authenticated={request.user.is_authenticated!r}", flush=True)
-
-    print(f"TAPIS_DEBUG: request had Host={request.get_host()!r} "
-          f"is_secure={request.is_secure()!r} "
-          f"X-Forwarded-Proto={request.META.get('HTTP_X_FORWARDED_PROTO')!r} "
-          f"X-Forwarded-Host={request.META.get('HTTP_X_FORWARDED_HOST')!r}", flush=True)
+    # Label Studio's InactivitySessionTimeoutMiddleWare (core/middleware.py)
+    # logs the user straight back out on the very next request if
+    # session['last_login'] is missing -- it defaults the "last login" time
+    # to 0, so current_time - 0 always exceeds MAX_SESSION_AGE. Django's own
+    # auth.login() never sets this key; only Label Studio's own login wrapper
+    # (users/functions/common.py's login()) does, alongside auth.login(). Set
+    # it here too so a Tapis-authenticated session survives past this request.
+    request.session["last_login"] = time.time()
 
     redirect_to = request.session.pop(REDIRECT_SESSION_KEY, "/")
     return HttpResponseRedirect(redirect_to)

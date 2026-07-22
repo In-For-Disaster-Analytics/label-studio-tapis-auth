@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+.env
 
 # OpenWolf / Claude Code local tooling scaffold — auto-provisioned by the
 # environment, not part of this project; never intended to be committed.

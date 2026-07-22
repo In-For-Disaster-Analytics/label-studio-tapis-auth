@@ -36,30 +36,37 @@ This backend fetches the tenant's RS256 public key from the Tapis Tenants API
 with `PyJWT` before trusting any claim. Worth backporting to WebODM's backend
 too — flagging it here rather than silently fixing it there.
 
-## 1. Register an OAuth2 client with Tapis
+## Deploying as a Tapis Pod
 
 ```bash
-curl -H "X-Tapis-Token: $JWT" -H "Content-type: application/json" \
-  -d '{"client_id": "label-studio", "callback_url": "https://label-studio.pods.portals.tapis.io/tapis/callback/"}' \
-  https://portals.tapis.io/v3/oauth2/clients
+export TAPIS_USERNAME=...   TAPIS_PASSWORD=...   # or you'll be prompted
+python tapis/register_pod.py --owner in-for-disaster-analytics --dry-run   # inspect first
+python tapis/register_pod.py --owner in-for-disaster-analytics             # then for real
 ```
 
-This requires a Tapis account with tenant access — needs to be run by
-whoever administers the Tapis tenant this deployment will use. The response
-returns `client_id` and `client_key` (Tapis's name for what we call
-`TAPIS_CLIENT_SECRET` below) — save both.
+`tapis/register_pod.py` (mirroring `subside/tapis/register_pods.py`'s
+conventions exactly — upsert/`--recreate`/`--dry-run`) does the whole
+sequence in the right order: registers the OAuth2 client against the pod's
+URL first (deterministic from `pod_id`, no chicken-and-egg problem), writes
+the resulting `TAPIS_CLIENT_ID`/`TAPIS_CLIENT_SECRET` to a local `.env`
+(gitignored — never commit it), creates the persistent `label-studio-data`
+Volume if it doesn't exist, then creates or updates the pod itself.
 
-## 2. Environment variables
+Requires a Tapis account with tenant access. **This exact script has not
+been run against a real Tapis tenant yet** — see "What's actually been
+verified" below for what has and hasn't been exercised.
+
+## Environment variables
 
 | Variable | Value |
 |---|---|
 | `TAPIS_BASE_URL` | `https://portals.tapis.io` (this ecosystem's actual tenant base — see `subside`) |
 | `TAPIS_TENANT_ID` | the Tapis tenant this client was registered under |
-| `TAPIS_CLIENT_ID` | from step 1 |
-| `TAPIS_CLIENT_SECRET` | the `client_key` value from step 1 |
-| `TAPIS_CALLBACK_URL` | must exactly match the `callback_url` registered in step 1 |
+| `TAPIS_CLIENT_ID` | written to `.env` by `register_pod.py` |
+| `TAPIS_CLIENT_SECRET` | written to `.env` by `register_pod.py` (Tapis calls this `client_key`) |
+| `TAPIS_CALLBACK_URL` | written to `.env` by `register_pod.py`; must exactly match the registered callback |
 
-## 3. Build and run
+## Local build and run (dev/testing only)
 
 ```bash
 docker build -t label-studio-tapis .
@@ -75,31 +82,6 @@ Login flow: `/tapis/login/` → redirects to Tapis → user authorizes →
 Tapis redirects to `/tapis/callback/` → token is verified → Django session
 established → redirect to whatever `?next=` was on the login link (defaults
 to `/`).
-
-## As a Tapis Pod
-
-```python
-t.pods.create_pod(
-    pod_id="label-studio",
-    image="ghcr.io/in-for-disaster-analytics/label-studio-tapis-auth:latest",
-    environment_variables={
-        "TAPIS_BASE_URL": "https://portals.tapis.io",
-        "TAPIS_TENANT_ID": "portals",
-        "TAPIS_CLIENT_ID": "label-studio",
-        "TAPIS_CLIENT_SECRET": "<client_key from step 1>",
-        "TAPIS_CALLBACK_URL": "https://label-studio.pods.portals.tapis.io/tapis/callback/",
-    },
-    volume_mounts={"/label-studio/data": {"type": "tapisvolume", "source_id": "label-studio-data"}},
-    networking={"default": {"protocol": "http", "port": 8080}},
-    resources={"cpu_request": 250, "cpu_limit": 2000, "mem_request": 512, "mem_limit": 3072},
-)
-```
-
-Register the OAuth2 client (step 1) with the pod's URL *before* creating the
-pod — the subdomain is deterministic from `pod_id`
-(`https://label-studio.pods.portals.tapis.io`), so there's no chicken-and-egg
-problem if the client is registered first. Same ordering `subside`'s own
-`register_pods.py` uses.
 
 Two things to decide when actually deploying:
 
@@ -135,8 +117,9 @@ Built and booted (`docker build` + `docker run`) against the real
 token exchange round-trip, since that requires a real registered OAuth2
 client and a real user going through Tapis's own login UI — only reachable
 by whoever administers the Tapis tenant this will run under. Recommend
-running that full round-trip once a real client is registered (step 1)
-before relying on this for actual labeling work.
+running that full round-trip after `tapis/register_pod.py` has actually been
+run against a real Tapis tenant, before relying on this for actual labeling
+work.
 
 ## Django settings gotcha (hit during testing, now fixed)
 

@@ -9,7 +9,7 @@ read back rather than rotated, so nothing already holding it is stranded).
 Usage:
     export TAPIS_USERNAME=... TAPIS_PASSWORD=...   # or you'll be prompted
     python tapis/workflows/register_oauth_client.py \
-        --callback-url https://label-studio.pods.portals.tapis.io/tapis/callback/ \
+        --callback-url https://labelstudio.pods.portals.tapis.io/tapis/callback/ \
         --client-id label-studio
 """
 
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", default=os.environ.get("TAPIS_BASE_URL", "https://portals.tapis.io"))
     parser.add_argument("--client-id", default="label-studio")
     parser.add_argument("--callback-url",
-                        default="https://label-studio.pods.portals.tapis.io/tapis/callback/",
+                        default="https://labelstudio.pods.portals.tapis.io/tapis/callback/",
                         help="Must exactly match TAPIS_CALLBACK_URL passed to the pod.")
     parser.add_argument("--display-name", default="Label Studio")
     parser.add_argument("--env-file", default=str(DEFAULT_ENV_PATH),

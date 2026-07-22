@@ -7,7 +7,7 @@ separate API+UI split — is a single container. Adds a persistent Volume,
 which subside's pods don't need but this one does (SQLite DB + uploaded
 task data).
 
-    label-studio  ->  https://label-studio.pods.portals.tapis.io  (:8080)
+    labelstudio  ->  https://labelstudio.pods.portals.tapis.io  (:8080)
 
 Usage:
     export TAPIS_USERNAME=... TAPIS_PASSWORD=...      # or you'll be prompted
@@ -46,8 +46,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-POD_ID = "label-studio"
-VOLUME_ID = "label-studio-data"
+# Tapis pod_id/volume_id must be lowercase alphanumeric, first char alpha —
+# NO hyphens (same constraint subside's register_pods.py notes for pod_id;
+# it applies to volume_id too, confirmed the hard way: create_volume() 400'd
+# on "label-studio-data" while pod_id="label-studio" was never even reached).
+POD_ID = "labelstudio"
+VOLUME_ID = "labelstudiodata"
 SECRET_KEYS = {"TAPIS_CLIENT_SECRET"}
 
 

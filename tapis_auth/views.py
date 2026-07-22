@@ -78,6 +78,11 @@ def callback(request):
     print(f"TAPIS_DEBUG: after login() session_key={request.session.session_key!r} "
           f"request.user.is_authenticated={request.user.is_authenticated!r}", flush=True)
 
+    print(f"TAPIS_DEBUG: request had Host={request.get_host()!r} "
+          f"is_secure={request.is_secure()!r} "
+          f"X-Forwarded-Proto={request.META.get('HTTP_X_FORWARDED_PROTO')!r} "
+          f"X-Forwarded-Host={request.META.get('HTTP_X_FORWARDED_HOST')!r}", flush=True)
+
     redirect_to = request.session.pop(REDIRECT_SESSION_KEY, "/")
     return HttpResponseRedirect(redirect_to)
 

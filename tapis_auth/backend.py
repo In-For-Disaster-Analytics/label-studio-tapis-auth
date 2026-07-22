@@ -122,6 +122,11 @@ class TapisOAuth2Backend(ModelBackend):
                 org = Organization.create_organization(created_by=user, title="Label Studio")
             user.active_organization = org
             user.save(update_fields=["active_organization"])
+            print(f"TAPIS_DEBUG: attached user={username!r} to org={org!r} "
+                  f"(pk={org.pk})", flush=True)
+        else:
+            print(f"TAPIS_DEBUG: user={username!r} already had "
+                  f"active_organization={user.active_organization!r}", flush=True)
 
         logger.info("Tapis OAuth2 login: %s (%s)", username, "created" if created else "existing")
         return user

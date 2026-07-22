@@ -66,9 +66,17 @@ def callback(request):
     backend = TapisOAuth2Backend()
     user = backend.authenticate(request, access_token=access_token)
     if not user:
+        print("TAPIS_DEBUG: backend.authenticate() returned None", flush=True)
         return HttpResponseBadRequest("Tapis token verification failed")
 
+    print(f"TAPIS_DEBUG: authenticated user={user.username!r} "
+          f"active_organization={user.active_organization!r} "
+          f"is_active={user.is_active!r}", flush=True)
+
     login(request, user, backend="tapis_auth.backend.TapisOAuth2Backend")
+
+    print(f"TAPIS_DEBUG: after login() session_key={request.session.session_key!r} "
+          f"request.user.is_authenticated={request.user.is_authenticated!r}", flush=True)
 
     redirect_to = request.session.pop(REDIRECT_SESSION_KEY, "/")
     return HttpResponseRedirect(redirect_to)
